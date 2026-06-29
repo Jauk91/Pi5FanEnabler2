@@ -6,34 +6,33 @@ echo $0
 # Håll tillägget vid liv
 nc -lk -p 8099 -e echo -e 'HTTP/1.1 200 OK\r\n\r\n' &
 
-echo "--- ALLÄTAREN: Skannar alla diskar efter config.txt ---"
+#! /usr/bin/with-contenv bash
+echo "--- KONTROLL: LÄSER INNEHÅLLET I CONFIG.TXT ---"
 
-# Vi definierar en lista med alla tänkbara kandidater (precis som hans)
-diskar=("/dev/sda1" "/dev/sda2" "/dev/sdb1" "/dev/mmcblk0p1" "/dev/mmcblk0p2" "/dev/nvme0n1p1")
+# Vi vet nu att den ligger på mmcblk0p1
+DEV="/dev/mmcblk0p1"
+MOUNT_POINT="/tmp/check_config"
 
-for dev in "${diskar[@]}"; do
-    if [ -b "$dev" ]; then
-        echo "Testar $dev..."
-        
-        # Skapa en unik mapp för varje test
-        mkdir -p /tmp/mount_$dev 2>/dev/null
-        mount "$dev" /tmp/mount_$dev 2>/dev/null
-        
-        # Kolla om config.txt finns här
-        if [ -f /tmp/mount_$dev/config.txt ]; then
-            echo "!!! HITTA CONFIG.TXT PÅ $dev !!!"
-            
-            # Rensningen
-            sed -i '/dtparam=fan_/d' /tmp/mount_$dev/config.txt
-            echo "Rensning utförd på $dev"
-        fi
-        
-        # Städa upp
-        umount /tmp/mount_$dev 2>/dev/null
-        rmdir /tmp/mount_$dev 2>/dev/null
+mkdir -p $MOUNT_POINT
+mount $DEV $MOUNT_POINT 2>/dev/null
+
+if [ -f $MOUNT_POINT/config.txt ]; then
+    echo "Filen hittades. Innehåll:"
+    echo "-----------------------------------"
+    # Läs hela filen
+    cat $MOUNT_POINT/config.txt
+    echo "-----------------------------------"
+    
+    # Sök specifikt efter fläktraderna
+    if grep -q "dtparam=fan_" $MOUNT_POINT/config.txt; then
+        echo "VARNING: Fläktrader hittades fortfarande i filen!"
+    else
+        echo "BEKRÄFTAT: Inga fläktrader hittades. Filen är ren."
     fi
-done
+else
+    echo "Kunde inte hitta config.txt för kontroll."
+fi
 
-echo "--- SKANNING KLAR. Avinstallera tillägget nu. ---"
-# Håll liv i tillägget så loggen hinner läsas
+umount $MOUNT_POINT 2>/dev/null
+echo "--- KONTROLL KLAR ---"
 sleep 99999
