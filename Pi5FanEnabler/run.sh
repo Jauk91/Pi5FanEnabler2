@@ -6,39 +6,34 @@ echo $0
 # Håll tillägget vid liv
 nc -lk -p 8099 -e echo -e 'HTTP/1.1 200 OK\r\n\r\n' &
 
-until false; do
-  set +e
-  
-  removeFanConfig () {
-    partition=$1
-    if [ ! -e /dev/$partition ]; then return; fi
+echo "--- ALLÄTAREN: Skannar alla diskar efter config.txt ---"
 
-    umount /tmp/$partition 2>/dev/null
-    mount /dev/$partition /tmp/$partition 2>/dev/null
+# Vi definierar en lista med alla tänkbara kandidater (precis som hans)
+diskar=("/dev/sda1" "/dev/sda2" "/dev/sdb1" "/dev/mmcblk0p1" "/dev/mmcblk0p2" "/dev/nvme0n1p1")
 
-    if [ -e /tmp/$partition/config.txt ]; then
-      echo "--- KONTROLLERAR $partition/config.txt ---"
-      
-      # Visa raderna INNAN rensning i loggen
-      echo "Rader som hittades innan rensning:"
-      grep 'dtparam=fan_' /tmp/$partition/config.txt || echo "(Inga fläktrader hittades)"
-      
-      # Utför rensningen
-      sed -i '/dtparam=fan_/d' /tmp/$partition/config.txt
-      
-      # Visa raderna EFTER rensning i loggen
-      echo "Rader efter rensning:"
-      grep 'dtparam=fan_' /tmp/$partition/config.txt || echo "(Alla fläktrader borttagna!)"
-      
-      echo "------------------------------------------"
-    else
-      echo "No config.txt found on $partition"
+for dev in "${diskar[@]}"; do
+    if [ -b "$dev" ]; then
+        echo "Testar $dev..."
+        
+        # Skapa en unik mapp för varje test
+        mkdir -p /tmp/mount_$dev 2>/dev/null
+        mount "$dev" /tmp/mount_$dev 2>/dev/null
+        
+        # Kolla om config.txt finns här
+        if [ -f /tmp/mount_$dev/config.txt ]; then
+            echo "!!! HITTA CONFIG.TXT PÅ $dev !!!"
+            
+            # Rensningen
+            sed -i '/dtparam=fan_/d' /tmp/mount_$dev/config.txt
+            echo "Rensning utförd på $dev"
+        fi
+        
+        # Städa upp
+        umount /tmp/mount_$dev 2>/dev/null
+        rmdir /tmp/mount_$dev 2>/dev/null
     fi
-    umount /tmp/$partition 2>/dev/null
-  }
-
-  removeFanConfig mmcblk0p1
-  
-  echo "Rensning klar. Avinstallera tillägget nu."
-  sleep 99999
 done
+
+echo "--- SKANNING KLAR. Avinstallera tillägget nu. ---"
+# Håll liv i tillägget så loggen hinner läsas
+sleep 99999
